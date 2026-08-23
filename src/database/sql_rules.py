@@ -2,11 +2,12 @@ import re
 
 
 ALLOWED_TABLES = {
-    "fact_revenue",
-    "dim_region",
-    "dim_client",
-    "dim_product",
+    "FINANCE_DEV.CORE.FACT_SALES",
+    "FINANCE_DEV.CORE.DIM_REGION",
+    "FINANCE_DEV.CORE.DIM_CUSTOMER",
+    "FINANCE_DEV.CORE.DIM_PRODUCT",
 }
+
 
 FORBIDDEN_OPERATIONS = {
     "INSERT",
@@ -24,6 +25,9 @@ FORBIDDEN_OPERATIONS = {
 def validate_sql(sql: str) -> tuple[bool, str]:
 
     sql_clean = sql.strip().rstrip(";")
+    sql_clean = re.sub(r"^```sql\s*", "", sql_clean, flags=re.IGNORECASE)
+    sql_clean = re.sub(r"\s*```$", "", sql_clean)
+    sql_clean = sql_clean.strip()
     sql_upper = sql_clean.upper()
 
     # -----------------------------------
@@ -45,23 +49,27 @@ def validate_sql(sql: str) -> tuple[bool, str]:
             return False, f"Forbidden SQL operation detected: {operation}"
 
     # -----------------------------------
-    # 3. Check referenced tables
+    # 3. Find referenced tables
     # -----------------------------------
 
-    tables_found = set(
-        re.findall(
-            r"\b(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_]*)",
-            sql_clean,
-            re.IGNORECASE
-        )
+    table_matches = re.findall(
+        r"\b(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_\.]*)",
+        sql_upper,
+        re.IGNORECASE
     )
+
+    tables_found = set(table_matches)
+
+    # -----------------------------------
+    # 4. Check table authorization
+    # -----------------------------------
 
     invalid_tables = tables_found - ALLOWED_TABLES
 
     if invalid_tables:
         return False, (
-            f"Unauthorized table(s): "
-            f"{', '.join(sorted(invalid_tables))}"
+            "Unauthorized table(s): "
+            + ", ".join(sorted(invalid_tables))
         )
 
     return True, "SQL passed validation."
@@ -71,25 +79,27 @@ if __name__ == "__main__":
 
     test_queries = {
 
-        "Valid query": """
-            SELECT SUM(f.revenue)
-            FROM fact_revenue f
-            JOIN dim_region r
-                ON f.region_id = r.region_id
-            WHERE r.region_name = 'APAC';
+        "Valid revenue query": """
+            SELECT SUM(f.REVENUE)
+            FROM FINANCE_DEV.CORE.FACT_SALES f
+            JOIN FINANCE_DEV.CORE.DIM_REGION r
+                ON f.REGION_KEY = r.REGION_KEY
+            WHERE r.REGION_NAME = 'APAC'
+              AND f.SALE_DATE >= '2026-04-01'
+              AND f.SALE_DATE < '2026-07-01';
         """,
 
         "Dangerous DELETE": """
-            DELETE FROM fact_revenue;
+            DELETE FROM FINANCE_DEV.CORE.FACT_SALES;
         """,
 
         "Dangerous DROP": """
-            DROP TABLE fact_revenue;
+            DROP TABLE FINANCE_DEV.CORE.FACT_SALES;
         """,
 
         "Unauthorized table": """
             SELECT *
-            FROM employee_salary;
+            FROM FINANCE_DEV.CORE.EMPLOYEE_SALARY;
         """
     }
 

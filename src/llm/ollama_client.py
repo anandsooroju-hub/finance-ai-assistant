@@ -2,7 +2,7 @@ import requests
 
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "llama3"
+MODEL = "qwen2.5:1.5b-instruct"
 
 
 def ask_llama(prompt: str) -> str:
@@ -12,7 +12,11 @@ def ask_llama(prompt: str) -> str:
         json={
             "model": MODEL,
             "prompt": prompt,
-            "stream": False
+            "stream": False,
+            "options": {
+                "temperature": 0,
+                "num_predict": 300
+            }
         },
         timeout=300
     )

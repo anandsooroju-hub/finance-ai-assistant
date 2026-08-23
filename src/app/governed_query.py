@@ -1,12 +1,40 @@
-import sqlite3
+import re
 
-from src.llm.ollama_client import ask_llama
+from src.llm.llm_client import generate
 from src.llm.sql_prompt import build_sql_prompt
 from src.database.sql_rules import validate_sql
+from src.database.snowflake_connection import get_connection
 from src.llm.response_generator import generate_business_response
 
 
-DB_PATH = "data/finance.db"
+def clean_sql(sql: str) -> str:
+    """
+    Remove markdown code fences that an LLM may add
+    around otherwise valid SQL.
+    """
+
+    sql = sql.strip()
+
+    sql = re.sub(
+        r"^```sql\s*",
+        "",
+        sql,
+        flags=re.IGNORECASE
+    )
+
+    sql = re.sub(
+        r"^```\s*",
+        "",
+        sql
+    )
+
+    sql = re.sub(
+        r"\s*```$",
+        "",
+        sql
+    )
+
+    return sql.strip()
 
 
 def execute_governed_query(question: str):
@@ -24,7 +52,10 @@ def execute_governed_query(question: str):
     # 2. Generate candidate SQL
     # -----------------------------
 
-    sql = ask_llama(prompt).strip()
+    sql = generate(prompt).strip()
+
+    # Normalize LLM output
+    sql = clean_sql(sql)
 
     print("\nGENERATED SQL:")
     print(sql)
@@ -46,14 +77,16 @@ def execute_governed_query(question: str):
     # 4. Execute approved SQL
     # -----------------------------
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
 
     try:
-        cursor = conn.execute(sql)
+        cursor = conn.cursor()
+
+        cursor.execute(sql)
 
         rows = cursor.fetchall()
 
-        print("\nDATABASE RESULT:")
+        print("\nSNOWFLAKE RESULT:")
 
         for row in rows:
             print(row)
