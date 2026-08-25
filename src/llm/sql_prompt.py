@@ -1,4 +1,5 @@
 from src.database.semantic_model import SEMANTIC_MODEL
+REVENUE_EXPRESSION = SEMANTIC_MODEL["measures"]["revenue"]["expression"]
 
 
 def build_sql_prompt(question: str) -> str:
@@ -52,7 +53,7 @@ IMPORTANT RULES:
 
    ALWAYS use:
 
-   COALESCE(SUM(f.REVENUE), 0)
+   {REVENUE_EXPRESSION}
 
    NEVER use:
 
@@ -120,6 +121,23 @@ IMPORTANT RULES:
 
    DIM_CUSTOMER and DIM_PRODUCT must NOT be joined unless
    the user asks about customer or product.
+
+EXAMPLE:
+
+For the question:
+"What was APAC revenue in Q2 2026?"
+
+Use:
+
+SELECT COALESCE(SUM(f.REVENUE), 0)
+FROM FINANCE_DEV.CORE.FACT_SALES f
+JOIN FINANCE_DEV.CORE.DIM_REGION r
+    ON f.REGION_KEY = r.REGION_KEY
+WHERE f.SALE_DATE >= '2026-04-01'
+  AND f.SALE_DATE < '2026-07-01'
+  AND r.REGION_NAME = 'APAC';
+
+Do NOT join DIM_CUSTOMER or DIM_PRODUCT.
 
 SEMANTIC CONTEXT:
 
