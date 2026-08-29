@@ -1,6 +1,7 @@
 import re
 
 from src.llm.llm_client import generate
+from src.app.intent_parser import parse_intent
 from src.llm.sql_prompt import build_sql_prompt
 from src.database.sql_rules import validate_sql
 from src.database.snowflake_connection import get_connection
@@ -41,15 +42,23 @@ def execute_governed_query(question: str):
 
     print("\nUSER QUESTION:")
     print(question)
+    # -----------------------------
+    # 1. Extract business intent
+    # -----------------------------
+
+    intent = parse_intent(question)
+
+    print("\nINTENT:")
+    print(intent)
 
     # -----------------------------
-    # 1. Build LLM prompt
+    # 2. Build LLM prompt
     # -----------------------------
 
-    prompt = build_sql_prompt(question)
+    prompt = build_sql_prompt(question, intent)
 
     # -----------------------------
-    # 2. Generate candidate SQL
+    # 3. Generate candidate SQL
     # -----------------------------
 
     sql = generate(prompt).strip()
@@ -61,7 +70,7 @@ def execute_governed_query(question: str):
     print(sql)
 
     # -----------------------------
-    # 3. Validate SQL
+    # 4. Validate SQL
     # -----------------------------
 
     valid, message = validate_sql(sql)
@@ -74,7 +83,7 @@ def execute_governed_query(question: str):
         return
 
     # -----------------------------
-    # 4. Execute approved SQL
+    # 5. Execute approved SQL
     # -----------------------------
 
     conn = get_connection()
@@ -92,7 +101,7 @@ def execute_governed_query(question: str):
             print(row)
 
         # -----------------------------
-        # 5. Generate business response
+        # 6. Generate business response
         # -----------------------------
 
         answer = generate_business_response(
@@ -109,6 +118,6 @@ def execute_governed_query(question: str):
 
 if __name__ == "__main__":
 
-    question = "What was APAC revenue in Q2 2026?"
+    question = "What was revenue by region in Q1 2026?"
 
     execute_governed_query(question)

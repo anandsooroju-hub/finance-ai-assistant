@@ -1,5 +1,5 @@
 import re
-
+from src.database.semantic_model import SEMANTIC_MODEL
 
 ALLOWED_TABLES = {
     "FINANCE_DEV.CORE.FACT_SALES",
@@ -49,7 +49,29 @@ def validate_sql(sql: str) -> tuple[bool, str]:
             return False, f"Forbidden SQL operation detected: {operation}"
 
     # -----------------------------------
-    # 3. Find referenced tables
+    # 3. Revenue governance
+    # -----------------------------------
+
+    if "F.REVENUE" in sql_upper:
+
+        revenue_expression = (
+            SEMANTIC_MODEL["measures"]["revenue"]["expression"]
+            .upper()
+        )
+
+        if revenue_expression not in sql_upper:
+            return False, (
+                "Invalid revenue logic: "
+                "REVENUE must use the approved semantic expression."
+            )
+
+        if "COALESCE(" not in sql_upper:
+            return False, (
+                "Invalid revenue logic: "
+                "REVENUE must use COALESCE."
+            )
+    # -----------------------------------
+    # 4. Find referenced tables
     # -----------------------------------
 
     table_matches = re.findall(
@@ -61,7 +83,7 @@ def validate_sql(sql: str) -> tuple[bool, str]:
     tables_found = set(table_matches)
 
     # -----------------------------------
-    # 4. Check table authorization
+    # 5. Check table authorization
     # -----------------------------------
 
     invalid_tables = tables_found - ALLOWED_TABLES
@@ -100,6 +122,11 @@ if __name__ == "__main__":
         "Unauthorized table": """
             SELECT *
             FROM FINANCE_DEV.CORE.EMPLOYEE_SALARY;
+        """,
+
+        "Invalid revenue logic": """
+        SELECT f.REVENUE
+        FROM FINANCE_DEV.CORE.FACT_SALES f;
         """
     }
 

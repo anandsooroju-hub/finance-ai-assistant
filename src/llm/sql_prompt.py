@@ -1,8 +1,9 @@
 from src.database.semantic_model import SEMANTIC_MODEL
+
 REVENUE_EXPRESSION = SEMANTIC_MODEL["measures"]["revenue"]["expression"]
 
 
-def build_sql_prompt(question: str) -> str:
+def build_sql_prompt(question: str, intent: dict) -> str:
 
     semantic_context = f"""
 MEASURES:
@@ -16,6 +17,17 @@ DIMENSIONS:
 TIME LOGIC:
 
 {SEMANTIC_MODEL["time_logic"]}
+"""
+
+    intent_context = f"""
+INTENT EXTRACTED FROM USER QUESTION:
+
+{intent}
+
+IMPORTANT:
+Generate SQL based on this intent.
+Do NOT infer filters or dimensions from examples.
+The extracted intent is authoritative.
 """
 
     prompt = f"""
@@ -46,23 +58,22 @@ IMPORTANT RULES:
    FINANCE_DEV.CORE.DIM_CUSTOMER
    FINANCE_DEV.CORE.DIM_PRODUCT
 
-4. REVENUE IS A MEASURE, NOT A COLUMN TO RETURN DIRECTLY.
+4. REVENUE IS A MEASURE.
 
    Whenever the user asks for revenue, total revenue,
    revenue generated, or revenue amount:
 
    ALWAYS use:
 
-   {REVENUE_EXPRESSION}
+   COALESCE(SUM(f.REVENUE), 0)
+
+   NEVER use:
+
+   SUM(f.REVENUE)
 
    NEVER use:
 
    f.REVENUE
-
-   Example:
-
-   SELECT COALESCE(SUM(f.REVENUE), 0) AS TOTAL_REVENUE
-   FROM FINANCE_DEV.CORE.FACT_SALES f
 
 5. Region must use:
 
@@ -84,22 +95,17 @@ IMPORTANT RULES:
 
    Derive quarters from f.SALE_DATE.
 
-10. Quarter boundaries are:
+10. QUARTER DEFINITIONS ARE STRICT.
 
-    Q1 = January 1 through March 31
-    Q2 = April 1 through June 30
-    Q3 = July 1 through September 30
-    Q4 = October 1 through December 31
+    Q1 means ALL dates from January 1 through March 31.
+    Q2 means ALL dates from April 1 through June 30.
+    Q3 means ALL dates from July 1 through September 30.
+    Q4 means ALL dates from October 1 through December 31.
+
+    NEVER interpret a quarter as a single month.
 
 11. For date ranges, prefer inclusive/exclusive
     boundaries.
-
-    Example:
-
-    Q2 2026 means:
-
-    f.SALE_DATE >= '2026-04-01'
-    AND f.SALE_DATE < '2026-07-01'
 
 12. Use table aliases:
 
@@ -117,27 +123,22 @@ IMPORTANT RULES:
 
 15. Only join dimensions required by the user's question.
 
-   For a region + revenue question, DIM_REGION is required.
+16. When the user asks for results "by" a dimension:
 
-   DIM_CUSTOMER and DIM_PRODUCT must NOT be joined unless
-   the user asks about customer or product.
+    - SELECT the dimension attribute.
+    - GROUP BY the dimension attribute.
+    - Do NOT filter to a specific dimension value
+      unless the user explicitly provides one.
 
-EXAMPLE:
+    Example:
 
-For the question:
-"What was APAC revenue in Q2 2026?"
+    "What was revenue by region in Q1 2026?"
 
-Use:
+    MUST return revenue separately for each region.
 
-SELECT COALESCE(SUM(f.REVENUE), 0)
-FROM FINANCE_DEV.CORE.FACT_SALES f
-JOIN FINANCE_DEV.CORE.DIM_REGION r
-    ON f.REGION_KEY = r.REGION_KEY
-WHERE f.SALE_DATE >= '2026-04-01'
-  AND f.SALE_DATE < '2026-07-01'
-  AND r.REGION_NAME = 'APAC';
+INTENT CONTEXT:
 
-Do NOT join DIM_CUSTOMER or DIM_PRODUCT.
+{intent_context}
 
 SEMANTIC CONTEXT:
 
